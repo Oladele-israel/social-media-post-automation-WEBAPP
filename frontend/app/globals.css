@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design tokens ──────────────────────────────────────────────────────────
+   PostPilot design system — Light theme, forest-green accent
+   Inspired by clean, card-based SaaS dashboards with high contrast and warmth.
+   Primary accent: #1a5c3a (forest green)  Secondary: #2ecc8f, #f59e0b, #ef4444
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Surfaces ── */
+  --pp-base:        #f5f6fa;   /* page background — off-white               */
+  --pp-surface-0:   #ffffff;   /* cards, panels                             */
+  --pp-surface-1:   #f0f2f7;   /* inset / secondary panels                  */
+  --pp-surface-2:   #e8ebf2;   /* hover rows, pressed cells                 */
+  --pp-surface-3:   #dde1ec;   /* selected / strong dividers                */
+
+  /* ── Sidebar ── */
+  --pp-sidebar-bg:  #ffffff;
+  --pp-sidebar-border: #e8ebf2;
+
+  /* ── Borders ── */
+  --pp-border-subtle:  rgba(0,0,0,0.05);
+  --pp-border-default: rgba(0,0,0,0.09);
+  --pp-border-strong:  rgba(0,0,0,0.15);
+
+  /* ── Brand / Primary ── */
+  --pp-green:        #1a5c3a;   /* deep forest green — primary CTA / active   */
+  --pp-green-mid:    #237a4e;   /* medium shade — hover states                */
+  --pp-green-light:  #2ecc8f;   /* bright mint — badges, positive indicators  */
+  --pp-green-pale:   #e6f5ee;   /* tinted background for active nav / pills   */
+  --pp-green-text:   #1a5c3a;   /* text on pale green backgrounds             */
+
+  /* ── Semantic ── */
+  --pp-amber:        #f59e0b;
+  --pp-amber-dim:    rgba(245,158,11,0.12);
+  --pp-amber-pale:   #fef3c7;
+  --pp-coral:        #ef4444;
+  --pp-coral-dim:    rgba(239,68,68,0.10);
+  --pp-coral-pale:   #fee2e2;
+  --pp-blue:         #3b82f6;
+  --pp-blue-dim:     rgba(59,130,246,0.10);
+  --pp-blue-pale:    #dbeafe;
+  --pp-pink:         #ec4899;
+
+  /* ── Text ── */
+  --pp-text-primary:   #111827;   /* near-black headings / values               */
+  --pp-text-secondary: #374151;   /* body text                                  */
+  --pp-text-muted:     #6b7280;   /* labels, captions                           */
+  --pp-text-faint:     #9ca3af;   /* placeholder, disabled                      */
+  --pp-text-inverse:   #ffffff;   /* text on dark/green backgrounds             */
+
+  /* ── Typography ── */
+  --pp-font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+
+  /* ── Radii ── */
+  --pp-r-xs:  4px;
+  --pp-r-sm:  8px;
+  --pp-r-md:  12px;
+  --pp-r-lg:  16px;
+  --pp-r-xl:  24px;
+  --pp-r-pill: 9999px;
+
+  /* ── Shadows ── */
+  --pp-shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
+  --pp-shadow-sm: 0 2px 8px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --pp-shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --pp-shadow-lg: 0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.05);
+
+  /* ── Easing ── */
+  --pp-ease:      cubic-bezier(0.16, 1, 0.3, 1);
+  --pp-ease-fast: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ─── Base reset ─────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: var(--pp-base);
+  color: var(--pp-text-primary);
+  font-family: var(--pp-font);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar              { width: 4px; height: 4px; }
+::-webkit-scrollbar-track        { background: transparent; }
+::-webkit-scrollbar-thumb        { background: rgba(0,0,0,0.12); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover  { background: rgba(0,0,0,0.22); }
+
+/* ─── Selection ──────────────────────────────────────────────────────────── */
+
+::selection {
+  background: rgba(26,92,58,0.15);
+  color: var(--pp-text-primary);
+}
+
+/* ─── Focus ring ─────────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--pp-green);
+  outline-offset: 2px;
+  border-radius: var(--pp-r-sm);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ─── Typography scale ───────────────────────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--pp-text-primary);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+p {
+  color: var(--pp-text-secondary);
+}
+
+/* ─── Button base ────────────────────────────────────────────────────────── */
+
+button {
+  font-family: var(--pp-font);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ─── Input base ─────────────────────────────────────────────────────────── */
+
+input, textarea, select {
+  font-family: var(--pp-font);
+  background: var(--pp-surface-0);
+  border: 1px solid var(--pp-border-default);
+  color: var(--pp-text-primary);
+  border-radius: var(--pp-r-md);
+  transition: border-color 0.15s var(--pp-ease), box-shadow 0.15s var(--pp-ease);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--pp-green);
+  box-shadow: 0 0 0 3px rgba(26,92,58,0.1);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--pp-text-faint);
+}
+
+/* ─── Reduced motion ─────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Utilities ──────────────────────────────────────────────────────────── */
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Page subtle pattern */
+.pp-gradient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 20% -10%, rgba(26,92,58,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 80% 110%, rgba(46,204,143,0.03) 0%, transparent 60%);
+}
+
+/* Skeleton shimmer */
+@keyframes pp-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+
+.pp-skeleton {
+  border-radius: var(--pp-r-sm);
+  background: linear-gradient(
+    90deg,
+    var(--pp-surface-1) 25%,
+    var(--pp-surface-2) 50%,
+    var(--pp-surface-1) 75%
+  );
+  background-size: 800px 100%;
+  animation: pp-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Fade-in animation */
+@keyframes pp-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.pp-fade-up {
+  animation: pp-fade-up 0.25s var(--pp-ease) both;
+}
+
+/* Sidebar transition */
+.sidebar-slide {
+  transition: transform 0.28s var(--pp-ease);
+}
+
+canvas {
+  display: block;
+}
