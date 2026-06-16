@@ -14,6 +14,7 @@ import { ScheduleTab } from "@/components/ScheduleTab"
 import { QueueTab } from "@/components/QueueTab"
 import { CampaignsTab } from "@/components/campaignstab"
 import { AccountsTab } from "@/components/accountsTab"
+import { CreatePostModal } from "@/components/posts/createPostModal"
 
 type Tab = "analytics" | "schedule" | "queue" | "campaigns" | "ai-writer" | "accounts"
 
@@ -120,23 +121,32 @@ export default function PostPilot() {
                   <Download className="mr-2 h-[13px] w-[13px]" />
                   Export
                 </Button>
-                <Button
-                  className="rounded-xl text-white text-[12px] font-semibold h-9"
-                  style={{
-                    background: "#1a5c3a",
-                    boxShadow: "0 2px 8px rgba(26,92,58,0.3)",
-                    border: "none",
-                  }}
-                  onMouseEnter={(e) => {
-                    ;(e.currentTarget as HTMLButtonElement).style.background = "#237a4e"
-                  }}
-                  onMouseLeave={(e) => {
-                    ;(e.currentTarget as HTMLButtonElement).style.background = "#1a5c3a"
-                  }}
-                >
-                  <Plus className="mr-2 h-[13px] w-[13px]" />
-                  New Post
-                </Button>
+
+                {/* "New Post" now opens the create-post modal. On success we
+                    jump to the Schedule tab so the user immediately sees
+                    their draft/scheduled post land in the list. */}
+                <CreatePostModal
+                  onCreated={() => setActiveTab("schedule")}
+                  trigger={
+                    <Button
+                      className="rounded-xl text-white text-[12px] font-semibold h-9"
+                      style={{
+                        background: "#1a5c3a",
+                        boxShadow: "0 2px 8px rgba(26,92,58,0.3)",
+                        border: "none",
+                      }}
+                      onMouseEnter={(e) => {
+                        ;(e.currentTarget as HTMLButtonElement).style.background = "#237a4e"
+                      }}
+                      onMouseLeave={(e) => {
+                        ;(e.currentTarget as HTMLButtonElement).style.background = "#1a5c3a"
+                      }}
+                    >
+                      <Plus className="mr-2 h-[13px] w-[13px]" />
+                      New Post
+                    </Button>
+                  }
+                />
               </div>
             </div>
 

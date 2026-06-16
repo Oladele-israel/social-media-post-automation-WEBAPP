@@ -1,310 +1,354 @@
+// components/ScheduleTab.tsx
 "use client"
 
-import { useState } from "react"
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
-import { Card, CardHeader, PlatformIcon, StatusPill, IconButton, EmptyState } from "@/components/uiPrimitives"
+import * as React from "react"
+import { Calendar, Facebook, Instagram, Linkedin, Loader2, Plus, RefreshCw, Twitter, X as XIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+import { useCategories } from "@/hooks/useCategories"
+import { usePosts } from "@/hooks/usePosts"
+import { postsApi } from "@/lib/post"
+import { ApiError } from "@/lib"
+import type { Platform, Post, PostStatus } from "@/lib/types"
+import { CreatePostModal } from "./posts/createPostModal"
+import { CreateCategoryDialog } from "./posts/createCategoryDialog"
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-const SCHEDULED_POSTS: Record<
-  number,
-  { platform: "instagram" | "linkedin" | "twitter"; text: string; time: string; status: "scheduled" | "draft" | "live" }[]
-> = {
-  10: [
-    { platform: "instagram", text: "Behind the scenes reel",  time: "2:00 PM",  status: "live"      },
-    { platform: "twitter",   text: "Engagement thread 🧵",    time: "5:30 PM",  status: "live"      },
-  ],
-  11: [{ platform: "linkedin",  text: "B2B content breakdown",  time: "9:00 AM",  status: "scheduled" }],
-  13: [
-    { platform: "instagram", text: "Product update post",      time: "11:00 AM", status: "scheduled" },
-    { platform: "twitter",   text: "Announcement thread",      time: "2:00 PM",  status: "scheduled" },
-  ],
-  15: [
-    { platform: "linkedin",  text: "Industry insights",        time: "8:30 AM",  status: "scheduled" },
-    { platform: "instagram", text: "Carousel: 5 tips",         time: "6:00 PM",  status: "draft"     },
-  ],
-  17: [{ platform: "twitter",   text: "Weekly roundup",          time: "12:00 PM", status: "scheduled" }],
-  20: [
-    { platform: "instagram", text: "User spotlight",            time: "10:00 AM", status: "draft"     },
-    { platform: "linkedin",  text: "Case study launch",         time: "3:00 PM",  status: "scheduled" },
-  ],
-  22: [{ platform: "twitter",   text: "Poll: best practices",    time: "1:00 PM",  status: "scheduled" }],
-  25: [
-    { platform: "instagram", text: "Behind-the-scenes",         time: "4:00 PM",  status: "draft"     },
-    { platform: "linkedin",  text: "Q&A recap post",            time: "9:00 AM",  status: "scheduled" },
-    { platform: "twitter",   text: "Tips thread",               time: "11:00 AM", status: "scheduled" },
-  ],
+const PLATFORM_ICONS: Record<Platform, React.ComponentType<{ className?: string }>> = {
+  linkedin: Linkedin,
+  instagram: Instagram,
+  x: Twitter,
+  facebook: Facebook,
 }
 
-const PLATFORM_BAR_COLORS: Record<string, string> = {
-  instagram: "#be185d",
-  linkedin:  "#1d4ed8",
-  twitter:   "#0369a1",
+const STATUS_STYLES: Record<PostStatus, { label: string; className: string }> = {
+  draft: { label: "Draft", className: "bg-gray-100 text-gray-600" },
+  scheduled: { label: "Scheduled", className: "bg-blue-50 text-blue-600" },
+  published: { label: "Published", className: "bg-[#e6f5ee] text-[#1a5c3a]" },
+  failed: { label: "Failed", className: "bg-red-50 text-red-600" },
+  cancelled: { label: "Cancelled", className: "bg-gray-100 text-gray-400" },
 }
+
+function formatDateGroup(dateStr: string | null): string {
+  if (!dateStr) return "No date"
+  return new Date(dateStr).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  })
+}
+
+function formatTime(dateStr: string | null): string {
+  if (!dateStr) return ""
+  return new Date(dateStr).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+}
+
+const CARD_SURFACE = {
+  borderColor: "rgba(0,0,0,0.07)",
+  background: "#ffffff",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+} as const
 
 export function ScheduleTab() {
-  const today = new Date()
-  const [month, setMonth]       = useState(today.getMonth())
-  const [year, setYear]         = useState(today.getFullYear())
-  const [selected, setSelected] = useState<number | null>(today.getDate())
+  const { categories, isLoading: categoriesLoading } = useCategories()
+  const [categoryFilter, setCategoryFilter] = React.useState<string>("all")
+  const [statusFilter, setStatusFilter] = React.useState<string>("all")
+  const [actionId, setActionId] = React.useState<string | null>(null)
+  const [actionError, setActionError] = React.useState<string | null>(null)
 
-  const firstDay  = new Date(year, month, 1).getDay()
-  const daysCount = new Date(year, month + 1, 0).getDate()
-  const monthName = new Date(year, month).toLocaleString("default", { month: "long", year: "numeric" })
+  const filter = React.useMemo(
+    () => ({
+      category_id: categoryFilter !== "all" ? categoryFilter : undefined,
+      status: statusFilter !== "all" ? (statusFilter as PostStatus) : undefined,
+      page_size: 50,
+    }),
+    [categoryFilter, statusFilter]
+  )
 
-  const prev = () => {
-    if (month === 0) { setMonth(11); setYear((y) => y - 1) } else setMonth((m) => m - 1)
-    setSelected(null)
+  const { posts, total, isLoading, error, refresh, addPost, updatePostInList, removePostFromList } = usePosts(filter)
+
+  const categoryById = React.useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+
+  const grouped = React.useMemo(() => {
+    const groups = new Map<string, Post[]>()
+    const sorted = [...posts].sort((a, b) => {
+      const aTime = a.scheduled_at ?? a.created_at
+      const bTime = b.scheduled_at ?? b.created_at
+      return new Date(aTime).getTime() - new Date(bTime).getTime()
+    })
+    for (const post of sorted) {
+      const key = formatDateGroup(post.scheduled_at ?? post.created_at)
+      groups.set(key, [...(groups.get(key) ?? []), post])
+    }
+    return groups
+  }, [posts])
+
+  const runAction = async (post: Post, action: () => Promise<void>, fallbackMessage: string) => {
+    setActionId(post.id)
+    setActionError(null)
+    try {
+      await action()
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : fallbackMessage)
+    } finally {
+      setActionId(null)
+    }
   }
-  const next = () => {
-    if (month === 11) { setMonth(0); setYear((y) => y + 1) } else setMonth((m) => m + 1)
-    setSelected(null)
-  }
 
-  const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: daysCount }, (_, i) => i + 1),
-  ]
+  const handlePublishNow = (post: Post) =>
+    runAction(
+      post,
+      async () => {
+        const { post: updated } = await postsApi.publish(post.id)
+        updatePostInList(updated)
+      },
+      "Couldn't queue this post for publishing."
+    )
 
-  const selectedPosts = selected ? (SCHEDULED_POSTS[selected] ?? []) : []
-  const totalPostsThisMonth = Object.values(SCHEDULED_POSTS).reduce((sum, arr) => sum + arr.length, 0)
+  const handleCancel = (post: Post) =>
+    runAction(
+      post,
+      async () => {
+        const updated = await postsApi.cancel(post.id)
+        updatePostInList(updated)
+      },
+      "Couldn't cancel this post."
+    )
+
+  const handleDelete = (post: Post) =>
+    runAction(
+      post,
+      async () => {
+        await postsApi.remove(post.id)
+        removePostFromList(post.id)
+      },
+      "Couldn't delete this post."
+    )
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="space-y-5">
+      {/* ── Categories overview ─────────────────────────────────────── */}
+      <div className="rounded-2xl border p-4" style={CARD_SURFACE}>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-[13px] font-semibold text-gray-700">Categories</h3>
+          <CreateCategoryDialog
+            trigger={
+              <Button variant="outline" size="sm" className="gap-1.5 rounded-xl text-[12px]">
+                <Plus className="h-3.5 w-3.5" />
+                New category
+              </Button>
+            }
+          />
+        </div>
 
-      {/* ── Month summary strip ───────────────────────────────────────────── */}
-      <div
-        className="grid grid-cols-3 rounded-2xl overflow-hidden border"
-        style={{ borderColor: "rgba(0,0,0,0.07)", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
-      >
-        {[
-          { label: "Scheduled",  value: "14", bg: "#e6f5ee", color: "#1a5c3a" },
-          { label: "Drafts",     value: "4",  bg: "#fef3c7", color: "#92400e" },
-          { label: "Published",  value: String(totalPostsThisMonth - 18), bg: "#d1fae5", color: "#065f46" },
-        ].map((s, i) => (
-          <div
-            key={s.label}
-            className="flex flex-col items-center py-4 gap-[4px]"
-            style={{
-              background: "#ffffff",
-              borderRight: i < 2 ? "1px solid rgba(0,0,0,0.07)" : "none",
-            }}
-          >
-            <p
-              className="text-[26px] font-bold"
-              style={{ color: s.color, letterSpacing: "-0.03em" }}
-            >
-              {s.value}
-            </p>
-            <span
-              className="text-[11px] font-semibold px-3 py-[3px] rounded-full"
-              style={{ background: s.bg, color: s.color }}
-            >
-              {s.label}
-            </span>
+        {categoriesLoading ? (
+          <div className="flex items-center gap-2 text-[12px] text-gray-400">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Loading categories...
           </div>
-        ))}
+        ) : categories.length === 0 ? (
+          <p className="text-[12px] text-gray-400">No categories yet. Create one to start organizing your posts.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setCategoryFilter("all")}
+              className={cn(
+                "rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors",
+                categoryFilter === "all"
+                  ? "border-[#1a5c3a] bg-[#e6f5ee] text-[#1a5c3a]"
+                  : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              )}
+            >
+              All ({total})
+            </button>
+            {categories.map((category) => (
+              <button
+                key={category.id}
+                onClick={() => setCategoryFilter(category.id)}
+                className={cn(
+                  "rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors",
+                  categoryFilter === category.id
+                    ? "border-[#1a5c3a] bg-[#e6f5ee] text-[#1a5c3a]"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50",
+                  !category.is_active && "opacity-50"
+                )}
+                title={category.description ?? undefined}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+      {/* ── Filters + new post ──────────────────────────────────────── */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-9 w-[150px] rounded-xl text-[12px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
 
-        {/* ── Calendar ────────────────────────────────────────────────────── */}
-        <Card>
-          <CardHeader title="Publishing calendar" sub="Click a day to see scheduled posts">
-            <IconButton onClick={prev} aria-label="Previous month">
-              <ChevronLeft className="w-[14px] h-[14px]" />
-            </IconButton>
-            <span
-              className="text-[12px] font-semibold min-w-[130px] text-center"
-              style={{ color: "#374151" }}
-            >
-              {monthName}
-            </span>
-            <IconButton onClick={next} aria-label="Next month">
-              <ChevronRight className="w-[14px] h-[14px]" />
-            </IconButton>
-          </CardHeader>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5 rounded-xl text-[12px]"
+            onClick={() => refresh()}
+            disabled={isLoading}
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
+            Refresh
+          </Button>
+        </div>
 
-          <div className="grid grid-cols-7 mb-1">
-            {DAYS.map((d) => (
-              <div
-                key={d}
-                className="text-[10px] font-bold text-center py-[6px]"
-                style={{ color: "#9ca3af" }}
-              >
-                {d}
+        <CreatePostModal onCreated={addPost} />
+      </div>
+
+      {actionError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-600">
+          {actionError}
+        </div>
+      )}
+
+      {/* ── Posts ───────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border" style={CARD_SURFACE}>
+        {isLoading ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-[13px] text-gray-400">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading posts...
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-center">
+            <p className="text-[13px] text-red-600">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => refresh()}>
+              Try again
+            </Button>
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: "#e6f5ee" }}>
+              <Calendar className="h-5 w-5" style={{ color: "#1a5c3a" }} />
+            </div>
+            <p className="text-[14px] font-semibold text-gray-700">No posts yet</p>
+            <p className="text-[12px] text-gray-400">Create your first post to see it here.</p>
+            <CreatePostModal
+              onCreated={addPost}
+              trigger={
+                <Button size="sm" className="mt-1 gap-1.5">
+                  <Plus className="h-3.5 w-3.5" />
+                  New Post
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <div className="divide-y" style={{ borderColor: "rgba(0,0,0,0.06)" }}>
+            {Array.from(grouped.entries()).map(([dateLabel, datePosts]) => (
+              <div key={dateLabel} className="p-4">
+                <h4 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-gray-400">{dateLabel}</h4>
+                <div className="space-y-3">
+                  {datePosts.map((post) => {
+                    const category = post.category ?? categoryById.get(post.category_id)
+                    const statusStyle = STATUS_STYLES[post.status]
+                    const isActing = actionId === post.id
+
+                    return (
+                      <div
+                        key={post.id}
+                        className="flex flex-col gap-3 rounded-xl border p-3 md:flex-row md:items-start md:justify-between"
+                        style={{ borderColor: "rgba(0,0,0,0.06)" }}
+                      >
+                        <div className="flex-1 space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={cn("rounded-md px-2 py-0.5 text-[11px] font-medium", statusStyle.className)}>
+                              {statusStyle.label}
+                            </span>
+                            {category && (
+                              <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                                {category.name}
+                              </span>
+                            )}
+                            {(post.scheduled_at || post.published_at) && (
+                              <span className="text-[11px] text-gray-400">
+                                {formatTime(post.scheduled_at ?? post.published_at)}
+                              </span>
+                            )}
+                          </div>
+
+                          {post.title && <p className="text-[13px] font-semibold text-gray-800">{post.title}</p>}
+                          <p className="line-clamp-2 text-[13px] text-gray-600">{post.content}</p>
+
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            {post.platforms.map((platform) => {
+                              const Icon = PLATFORM_ICONS[platform]
+                              return Icon ? (
+                                <span
+                                  key={platform}
+                                  className="flex h-6 w-6 items-center justify-center rounded-md bg-gray-100 text-gray-500"
+                                  title={platform}
+                                >
+                                  <Icon className="h-3 w-3" />
+                                </span>
+                              ) : null
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 gap-2">
+                          {(post.status === "draft" || post.status === "scheduled") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 rounded-lg text-[12px]"
+                              disabled={isActing}
+                              onClick={() => handlePublishNow(post)}
+                            >
+                              {isActing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Publish now"}
+                            </Button>
+                          )}
+
+                          {post.status === "scheduled" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 rounded-lg text-[12px] text-gray-500"
+                              disabled={isActing}
+                              onClick={() => handleCancel(post)}
+                            >
+                              Cancel
+                            </Button>
+                          )}
+
+                          {post.status === "draft" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 rounded-lg p-0 text-gray-400 hover:text-red-600"
+                              disabled={isActing}
+                              onClick={() => handleDelete(post)}
+                              title="Delete draft"
+                            >
+                              <XIcon className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             ))}
           </div>
-
-          <div className="grid grid-cols-7 gap-[2px]">
-            {cells.map((day, i) => {
-              if (!day) return <div key={`blank-${i}`} />
-              const posts      = SCHEDULED_POSTS[day] ?? []
-              const isToday    = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
-              const isSelected = day === selected
-
-              return (
-                <button
-                  key={day}
-                  onClick={() => setSelected(day)}
-                  className="relative flex flex-col items-center rounded-xl py-2 px-1 text-[12px] font-semibold transition-all duration-150 min-h-[54px]"
-                  style={{
-                    background: isSelected
-                      ? "#1a5c3a"
-                      : isToday
-                      ? "#e6f5ee"
-                      : "transparent",
-                    color: isSelected
-                      ? "#ffffff"
-                      : isToday
-                      ? "#1a5c3a"
-                      : "#374151",
-                    border: isSelected
-                      ? "none"
-                      : isToday
-                      ? "1px solid rgba(26,92,58,0.3)"
-                      : "1px solid transparent",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) {
-                      ;(e.currentTarget as HTMLButtonElement).style.background = "#f0f2f7"
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) {
-                      ;(e.currentTarget as HTMLButtonElement).style.background = isToday ? "#e6f5ee" : "transparent"
-                    }
-                  }}
-                >
-                  {day}
-                  {posts.length > 0 && (
-                    <div className="flex gap-[2px] mt-[3px] flex-wrap justify-center">
-                      {posts.slice(0, 3).map((p, pi) => (
-                        <div
-                          key={pi}
-                          className="w-[5px] h-[5px] rounded-full"
-                          style={{
-                            background: isSelected ? "rgba(255,255,255,0.7)" : PLATFORM_BAR_COLORS[p.platform],
-                          }}
-                        />
-                      ))}
-                      {posts.length > 3 && (
-                        <div
-                          className="w-[5px] h-[5px] rounded-full"
-                          style={{ background: isSelected ? "rgba(255,255,255,0.4)" : "#d1d5db" }}
-                        />
-                      )}
-                    </div>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Legend */}
-          <div
-            className="flex items-center gap-5 mt-4 pt-4"
-            style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}
-          >
-            {[
-              { color: "#be185d", label: "Instagram"   },
-              { color: "#1d4ed8", label: "LinkedIn"    },
-              { color: "#0369a1", label: "Twitter / X" },
-            ].map((l) => (
-              <span
-                key={l.label}
-                className="flex items-center gap-[6px] text-[11px] font-medium"
-                style={{ color: "#6b7280" }}
-              >
-                <span
-                  className="w-[8px] h-[8px] rounded-full"
-                  style={{ background: l.color }}
-                />
-                {l.label}
-              </span>
-            ))}
-          </div>
-        </Card>
-
-        {/* ── Day detail panel ─────────────────────────────────────────────── */}
-        <Card>
-          <CardHeader
-            title={
-              selected
-                ? `${new Date(year, month).toLocaleString("default", { month: "long" })} ${selected}`
-                : "Select a day"
-            }
-            sub={
-              selectedPosts.length
-                ? `${selectedPosts.length} post${selectedPosts.length > 1 ? "s" : ""} scheduled`
-                : "No posts scheduled"
-            }
-          >
-            <button
-              className="h-8 px-3 text-[11px] font-semibold rounded-xl border flex items-center gap-1 transition-all duration-150"
-              style={{
-                borderColor: "rgba(26,92,58,0.3)",
-                color: "#1a5c3a",
-                background: "#e6f5ee",
-              }}
-              onMouseEnter={(e) => {
-                ;(e.currentTarget as HTMLButtonElement).style.background = "#d1fae5"
-              }}
-              onMouseLeave={(e) => {
-                ;(e.currentTarget as HTMLButtonElement).style.background = "#e6f5ee"
-              }}
-            >
-              <Plus className="w-3 h-3" />
-              Add
-            </button>
-          </CardHeader>
-
-          {selectedPosts.length === 0 ? (
-            <EmptyState
-              icon={<Plus className="w-5 h-5" />}
-              title="No posts for this day"
-              description='Click "Add" to schedule something'
-            />
-          ) : (
-            <div className="flex flex-col gap-[6px]">
-              {selectedPosts.map((post, i) => (
-                <div
-                  key={i}
-                  className="flex gap-3 p-3 rounded-xl border transition-colors duration-150"
-                  style={{
-                    background: "#f5f6fa",
-                    borderColor: "rgba(0,0,0,0.07)",
-                  }}
-                  onMouseEnter={(e) => {
-                    ;(e.currentTarget as HTMLDivElement).style.background = "#e6f5ee"
-                    ;(e.currentTarget as HTMLDivElement).style.borderColor = "rgba(26,92,58,0.2)"
-                  }}
-                  onMouseLeave={(e) => {
-                    ;(e.currentTarget as HTMLDivElement).style.background = "#f5f6fa"
-                    ;(e.currentTarget as HTMLDivElement).style.borderColor = "rgba(0,0,0,0.07)"
-                  }}
-                >
-                  <PlatformIcon platform={post.platform} size="sm" />
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className="text-[12px] leading-relaxed line-clamp-2 font-medium"
-                      style={{ color: "#374151" }}
-                    >
-                      {post.text}
-                    </p>
-                    <div className="flex items-center gap-2 mt-[7px]">
-                      <span className="text-[10px] font-medium" style={{ color: "#9ca3af" }}>
-                        {post.time}
-                      </span>
-                      <StatusPill status={post.status} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+        )}
       </div>
     </div>
   )
