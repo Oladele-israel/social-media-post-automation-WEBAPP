@@ -12,6 +12,7 @@ import (
 
 	"github.com/Oladele-israel/socialmedia-post-automation/internal/auth"
 	"github.com/Oladele-israel/socialmedia-post-automation/internal/middleware"
+	"github.com/Oladele-israel/socialmedia-post-automation/internal/posts"
 	"github.com/Oladele-israel/socialmedia-post-automation/pkg/cache"
 	"github.com/Oladele-israel/socialmedia-post-automation/pkg/database"
 )
@@ -40,6 +41,10 @@ func main() {
 	authService := auth.NewService(authRepo, redisClient)
 	authHandler := auth.NewHandler(authService)
 
+	postsRepo := posts.NewRepository(db)
+	postsService := posts.NewService(postsRepo)
+	postsHandler := posts.NewHandler(postsService)
+
 	// Main router — only global middleware here
 	r := chi.NewRouter()
 	r.Use(middleware.CORS)
@@ -48,6 +53,7 @@ func main() {
 
 	// Mount each service router — main.go never sees individual routes
 	r.Mount("/api/auth", authHandler.Router(authMiddleware))
+	r.Mount("/api", postsHandler.Router(authMiddleware))
 	// Coming soon:
 	// r.Mount("/api/posts", postsHandler.Router(authMiddleware))
 	// r.Mount("/api/scheduler", schedulerHandler.Router(authMiddleware))
